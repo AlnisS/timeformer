@@ -5,14 +5,18 @@ const WALK_SPEED := 4.317
 const SPRINT_SPEED := 5.612
 const STEP_UP_DISTANCE = 0.55
 const GRAVITY = 31.36
-const JUMP_VELOCITY = 8.5
-const REGULAR_BRAKE_FACTOR = 25
-const REGULAR_ACCEL_FACTOR = 25
-const AIR_BRAKE_FACTOR = 2
+const JUMP_VELOCITY = 8.6
+const REGULAR_ACCEL_FACTOR = 12
 const AIR_ACCEL_FACTOR = 2
 const EXTRA_AIR_BRAKE_FACTOR = 2
+const REGULAR_TIME = 1.0
+const BULLET_TIME = 0.05
 
 onready var original_transform = transform
+
+var time_factor = REGULAR_TIME
+
+var max_y = 0
 
 var velocity = Vector3.ZERO
 
@@ -20,6 +24,11 @@ func _ready():
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 
 func _physics_process(delta):
+	time_factor = lerp(time_factor, \
+		BULLET_TIME if Input.is_key_pressed(KEY_CONTROL) else REGULAR_TIME, \
+		0.15)
+	delta *= time_factor
+	
 	if Input.is_action_just_pressed("reset"):
 		velocity = Vector3.ZERO
 		transform = original_transform
@@ -40,23 +49,20 @@ func _physics_process(delta):
 	
 	var move_input_mag = move_input.length()
 	
-	# this is a bit weird having WALK_SPEED and all, but basically WALK_SPEED
-	# was a decent speed when moving around at constant velocity,
-	# and this was derived from that code, so it will be refactored out soon
 	move_input = move_input.normalized().rotated(-$Camera.rotation.y) * WALK_SPEED
 	
 	if Input.is_action_pressed("sneak"):
 		move_input *= 0.25
 	
 	if _is_on_ground(delta):
-		velocity.x -= velocity.x * delta * REGULAR_BRAKE_FACTOR
-		velocity.z -= velocity.z * delta * REGULAR_BRAKE_FACTOR
+		velocity.x -= velocity.x * delta * REGULAR_ACCEL_FACTOR
+		velocity.z -= velocity.z * delta * REGULAR_ACCEL_FACTOR
 
 		velocity.x += move_input.x * delta * REGULAR_ACCEL_FACTOR
 		velocity.z += move_input.y * delta * REGULAR_ACCEL_FACTOR
 	else:
-		velocity.x -= velocity.x * delta * AIR_BRAKE_FACTOR
-		velocity.z -= velocity.z * delta * AIR_BRAKE_FACTOR
+		velocity.x -= velocity.x * delta * AIR_ACCEL_FACTOR
+		velocity.z -= velocity.z * delta * AIR_ACCEL_FACTOR
 		
 		velocity.x += move_input.x * delta * AIR_ACCEL_FACTOR
 		velocity.z += move_input.y * delta * AIR_ACCEL_FACTOR
@@ -65,12 +71,6 @@ func _physics_process(delta):
 			velocity.x -= velocity.x * delta * EXTRA_AIR_BRAKE_FACTOR
 			velocity.z -= velocity.z * delta * EXTRA_AIR_BRAKE_FACTOR
 
-	
-	
-#	print(velocity.z)
-	
-#	velocity.x = move_input.x
-#	velocity.z = move_input.y
 	
 	var walk_collision = move_and_collide(Vector3(velocity.x, 0, velocity.z) * delta)
 	
@@ -81,8 +81,7 @@ func _physics_process(delta):
 	
 	if _is_on_ground(delta) and Input.is_action_pressed("jump"):
 		velocity.y = JUMP_VELOCITY
-		
-#	var gravity_collision = move_and_collide(Vector3(0, velocity.y, 0) * delta)
+
 	var gravity_collision = move_and_collide(Vector3(-0.2 * velocity.x, velocity.y, -0.2 * velocity.z) * delta)
 	
 	if gravity_collision != null:
@@ -95,30 +94,13 @@ func _physics_process(delta):
 	
 	velocity.x = (translation.x - start_x) / delta
 	velocity.z = (translation.z - start_z) / delta
-#
-#	print(sqrt(pow(velocity.x, 2) + pow(velocity.z, 2)))
-	
-#	print(transform.origin.y)
 
-#	print(_is_on_ground(delta))
-	
-	
-#	if collision != null:
-#		pass
-#		print(collision.remainder)
-#		var step_up_collision = move_and_collide(collision.remainder + Vector3.UP * STEP_UP_DISTANCE, true, true, true)
-#		if (step_up_collision == null):
-#			transform.origin += collision.remainder + Vector3.UP * STEP_UP_DISTANCE
-#			move_and_collide(Vector3.DOWN)
-	
-#	move_and_slide(Vector3(move_input.x, 0, move_input.y), Vector3.UP)
-	
-	
+#	print(sqrt(pow(velocity.x, 2) + pow(velocity.z, 2)))
 
 func _is_on_ground(delta: float) -> bool:
 	return move_and_collide(Vector3(velocity.x * -delta, 0.001, velocity.z * -delta), true, true, true) == null \
-		and move_and_collide(Vector3(velocity.x * -delta, -0.001, velocity.z * -delta), true, true, true) != null \
-#		and abs(velocity.y) <= 0.001
+		and move_and_collide(Vector3(velocity.x * -delta, -0.001, velocity.z * -delta), true, true, true) != null
+
 
 func _input(event):
 	if event.is_action_pressed("ui_cancel"):
