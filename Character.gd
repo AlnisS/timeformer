@@ -20,10 +20,12 @@ func _ready():
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 
 func _physics_process(delta):
-	
 	if Input.is_action_just_pressed("reset"):
 		velocity = Vector3.ZERO
 		transform = original_transform
+	
+	var start_x = translation.x
+	var start_z = translation.z
 	
 	var move_input: Vector2 = Vector2.ZERO
 	
@@ -80,17 +82,20 @@ func _physics_process(delta):
 	if _is_on_ground(delta) and Input.is_action_pressed("jump"):
 		velocity.y = JUMP_VELOCITY
 		
-	var gravity_collision = move_and_collide(Vector3(0, velocity.y, 0) * delta)
-#	var gravity_collision = move_and_collide(Vector3(-0.2 * velocity.x, velocity.y, -0.2 * velocity.y) * delta)
+#	var gravity_collision = move_and_collide(Vector3(0, velocity.y, 0) * delta)
+	var gravity_collision = move_and_collide(Vector3(-0.2 * velocity.x, velocity.y, -0.2 * velocity.z) * delta)
 	
-#	if gravity_collision != null:
-#		velocity.y = 0
-#		translation.x += (0.2 * velocity.x - gravity_collision.remainder.x) * delta
-#		translation.z += (0.2 * velocity.z - gravity_collision.remainder.z) * delta
-#	else:
-#		translation.x += velocity.x * 0.2 * delta
-#		translation.z += velocity.z * 0.2 * delta
+	if gravity_collision != null:
+		velocity.y = 0
+		translation.x += (0.2 * velocity.x - gravity_collision.remainder.x) * delta
+		translation.z += (0.2 * velocity.z - gravity_collision.remainder.z) * delta
+	else:
+		translation.x += velocity.x * 0.2 * delta
+		translation.z += velocity.z * 0.2 * delta
 	
+	velocity.x = (translation.x - start_x) / delta
+	velocity.z = (translation.z - start_z) / delta
+#
 #	print(sqrt(pow(velocity.x, 2) + pow(velocity.z, 2)))
 	
 #	print(transform.origin.y)
@@ -113,7 +118,7 @@ func _physics_process(delta):
 func _is_on_ground(delta: float) -> bool:
 	return move_and_collide(Vector3(velocity.x * -delta, 0.001, velocity.z * -delta), true, true, true) == null \
 		and move_and_collide(Vector3(velocity.x * -delta, -0.001, velocity.z * -delta), true, true, true) != null \
-		and velocity.y <= 0
+#		and abs(velocity.y) <= 0.001
 
 func _input(event):
 	if event.is_action_pressed("ui_cancel"):
