@@ -72,6 +72,10 @@ sprint={
  ]
 }
 
+[network]
+
+limits/debugger_stdout/max_chars_per_second=20480
+
 [physics]
 
 3d/smooth_trimesh_collision=true

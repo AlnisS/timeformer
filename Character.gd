@@ -67,38 +67,41 @@ func _get_move_input() -> Vector2:
 	
 	return move_input.normalized()
 
-# moves character up and down slightly at xz of last frame and checks collision
-func _is_on_ground(delta: float) -> bool:
-	return !test_move(transform, Vector3(velocity.x * -delta, 0.001, velocity.z * -delta)) \
-		and test_move(transform, Vector3(velocity.x * -delta, -0.001, velocity.z * -delta))
-
 func _modify_move_input(move_input: Vector2) -> Vector2:
-	motion_state = MotionState.WALK
 	if Input.is_action_pressed("sneak"):
 		motion_state = MotionState.SNEAK
-	if Input.is_action_pressed("sprint"):
+	elif (Input.is_action_pressed("sprint") \
+			|| (motion_state == MotionState.SPRINT)) && move_input != Vector2.ZERO:
+#			&& Vector2(velocity.x, velocity.y).length() > 1:
 		motion_state = MotionState.SPRINT
+	else:
+		motion_state = MotionState.WALK
 	
 	match motion_state:
 		MotionState.WALK:
 			$Camera.fov = lerp($Camera.fov, 70, 0.2)
+			$Camera.translation.y = lerp($Camera.translation.y, 1.62, 0.3)
 		MotionState.SNEAK:
 			move_input *= 0.3
 			$Camera.fov = lerp($Camera.fov, 70, 0.2)
+			$Camera.translation.y = lerp($Camera.translation.y, 1.45, 0.3)
 		MotionState.SPRINT:
 			if move_input.y < 0:
 				move_input.y *= 1.3
 				$Camera.fov = lerp($Camera.fov, 85, 0.2)
+				$Camera.translation.y = lerp($Camera.translation.y, 1.62, 0.3)
 	
 	move_input = move_input.rotated(-$Camera.rotation.y) * WALK_SPEED
 	return move_input
 
 func _handle_horizontal_motion(delta: float, move_input: Vector2) -> void:
 	# TODO: this _is_on_ground is not stable
-	if _is_on_ground(delta):
+	if _is_on_ground(delta) || _is_on_ground(delta, move_input):
+#		print(true)
 		velocity -= Vector3(velocity.x, 0, velocity.z) * delta * REGULAR_ACCEL_FACTOR
 		velocity += Vector3(move_input.x, 0, move_input.y) * delta * REGULAR_ACCEL_FACTOR
 	else:
+#		print(false)
 		velocity -= Vector3(velocity.x, 0, velocity.z) * delta * AIR_ACCEL_FACTOR
 		velocity += Vector3(move_input.x, 0, move_input.y) * delta * AIR_ACCEL_FACTOR
 		
@@ -115,7 +118,8 @@ func _handle_vertical_motion(delta: float) -> void:
 		velocity.y = JUMP_VELOCITY
 	
 	# -0.2 in horizontal motion is to prevent walls from causing weirdness
-	var vertical_collision = move_and_collide(Vector3(-0.2 * velocity.x, velocity.y, -0.2 * velocity.z) * delta)
+	var vertical_collision = \
+		move_and_collide(Vector3(-0.2 * velocity.x, velocity.y, -0.2 * velocity.z) * delta)
 	
 	if vertical_collision != null:
 		velocity.y = 0
@@ -124,6 +128,16 @@ func _handle_vertical_motion(delta: float) -> void:
 	
 	translation.x += velocity.x * 0.2 * delta
 	translation.z += velocity.z * 0.2 * delta
+
+# moves character up and down slightly at xz of last frame and checks collision
+#func _is_on_ground(delta: float) -> bool:
+#	return !test_move(transform, Vector3(velocity.x * -delta, 0.001, velocity.z * -delta)) \
+#		and test_move(transform, Vector3(velocity.x * -delta, -0.001, velocity.z * -delta))
+
+func _is_on_ground(delta: float, fudge: Vector2 = Vector2(velocity.x, velocity.z)) -> bool:
+#	print(fudge)
+	return !test_move(transform, Vector3(fudge.x * -delta, 0.001, fudge.y * -delta)) \
+		and test_move(transform, Vector3(fudge.x * -delta, -0.001, fudge.y * -delta))
 
 func _input(event):
 	if event.is_action_pressed("ui_cancel"):
