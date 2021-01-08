@@ -18,7 +18,6 @@ __meta__ = {
 
 [node name="Character" type="KinematicBody" parent="."]
 collision_layer = 524288
-collision/safe_margin = 0.01
 script = ExtResource( 1 )
 
 [node name="CollisionShape" type="CollisionShape" parent="Character"]

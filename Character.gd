@@ -1,6 +1,7 @@
 extends KinematicBody
 
 const MOUSE_SENSITIVITY := 0.002
+const SNEAK_SPEED := 1.295
 const WALK_SPEED := 4.317
 const SPRINT_SPEED := 5.612
 const STEP_UP_DISTANCE = 0.55
@@ -31,28 +32,26 @@ func _physics_process(delta):
 	delta *= time_factor
 	
 	var start_xz = Vector2(translation.x, translation.z)
-	
-	var move_input: Vector2 = _get_move_input()
-	move_input = _modify_move_input(move_input)
-	_handle_horizontal_motion(delta, move_input)
+	_handle_horizontal_motion(delta, _modify_move_input( _get_move_input()))
 	_handle_vertical_motion(delta)
+	_clip_horizontal_velocity(delta, start_xz)
 	
-	# clip velocity to actual velocity after collisions
-	velocity.x = (translation.x - start_xz.x) / delta
-	velocity.z = (translation.z - start_xz.y) / delta
-	
-#	print(Vector2(velocity.x, velocity.z).length())
+	# I keep finding myself rewriting this line, so it stays as a comment
+	# print(Vector2(velocity.x, velocity.z).length())
 
+# returns character to start (don't call this in the middle of a loop, it will break stuff!)
 func _reset() -> void:
 	velocity = Vector3.ZERO
 	transform = original_transform
 	motion_state = MotionState.WALK
 
+# janky stopgap  function to control rate of flow of time
 func _get_time_factor() -> float:
 	return lerp(time_factor, \
 		BULLET_TIME if Input.is_action_pressed("main_button") else REGULAR_TIME, \
 		0.15)
 
+# collects raw input from the user
 func _get_move_input() -> Vector2:
 	var move_input: Vector2 = Vector2.ZERO
 	
@@ -67,12 +66,14 @@ func _get_move_input() -> Vector2:
 	
 	return move_input.normalized()
 
+# transforms user input into direction/magnitude of horizontal
 func _modify_move_input(move_input: Vector2) -> Vector2:
 	if Input.is_action_pressed("sneak"):
 		motion_state = MotionState.SNEAK
 	elif (Input.is_action_pressed("sprint") \
-			|| (motion_state == MotionState.SPRINT)) && move_input != Vector2.ZERO:
-#			&& Vector2(velocity.x, velocity.y).length() > 1:
+			|| (motion_state == MotionState.SPRINT)) && move_input.y < 0:
+			# this approach causes a delay when starting a sprint from a standstill:
+			# && Vector2(velocity.x, velocity.y).length() > 1:
 		motion_state = MotionState.SPRINT
 	else:
 		motion_state = MotionState.WALK
@@ -82,26 +83,23 @@ func _modify_move_input(move_input: Vector2) -> Vector2:
 			$Camera.fov = lerp($Camera.fov, 70, 0.2)
 			$Camera.translation.y = lerp($Camera.translation.y, 1.62, 0.3)
 		MotionState.SNEAK:
-			move_input *= 0.3
+			move_input *= (SNEAK_SPEED / WALK_SPEED)
 			$Camera.fov = lerp($Camera.fov, 70, 0.2)
 			$Camera.translation.y = lerp($Camera.translation.y, 1.45, 0.3)
 		MotionState.SPRINT:
 			if move_input.y < 0:
-				move_input.y *= 1.3
+				move_input.y *= (SPRINT_SPEED / WALK_SPEED)
 				$Camera.fov = lerp($Camera.fov, 85, 0.2)
 				$Camera.translation.y = lerp($Camera.translation.y, 1.62, 0.3)
 	
-	move_input = move_input.rotated(-$Camera.rotation.y) * WALK_SPEED
-	return move_input
+	return move_input.rotated(-$Camera.rotation.y) * WALK_SPEED
 
+# runs physics for horizontal movement
 func _handle_horizontal_motion(delta: float, move_input: Vector2) -> void:
-	# TODO: this _is_on_ground is not stable
 	if _is_on_ground(delta) || _is_on_ground(delta, move_input):
-#		print(true)
 		velocity -= Vector3(velocity.x, 0, velocity.z) * delta * REGULAR_ACCEL_FACTOR
 		velocity += Vector3(move_input.x, 0, move_input.y) * delta * REGULAR_ACCEL_FACTOR
 	else:
-#		print(false)
 		velocity -= Vector3(velocity.x, 0, velocity.z) * delta * AIR_ACCEL_FACTOR
 		velocity += Vector3(move_input.x, 0, move_input.y) * delta * AIR_ACCEL_FACTOR
 		
@@ -109,8 +107,9 @@ func _handle_horizontal_motion(delta: float, move_input: Vector2) -> void:
 		if (move_input.length_squared() == 0):
 			velocity -= Vector3(velocity.x, 0, velocity.z) * delta * EXTRA_AIR_BRAKE_FACTOR
 	
-	var walk_collision = move_and_collide(Vector3(velocity.x, 0, velocity.z) * delta)
+	var _walk_collision = move_and_collide(Vector3(velocity.x, 0, velocity.z) * delta)
 
+# runs physics for vertical movement
 func _handle_vertical_motion(delta: float) -> void:
 	velocity.y -= GRAVITY * delta
 	
@@ -129,13 +128,13 @@ func _handle_vertical_motion(delta: float) -> void:
 	translation.x += velocity.x * 0.2 * delta
 	translation.z += velocity.z * 0.2 * delta
 
-# moves character up and down slightly at xz of last frame and checks collision
-#func _is_on_ground(delta: float) -> bool:
-#	return !test_move(transform, Vector3(velocity.x * -delta, 0.001, velocity.z * -delta)) \
-#		and test_move(transform, Vector3(velocity.x * -delta, -0.001, velocity.z * -delta))
+# clips stored velocity to actual velocity over this loop cycle
+func _clip_horizontal_velocity(delta: float, start_xz: Vector2) -> void:
+	velocity.x = (translation.x - start_xz.x) / delta
+	velocity.z = (translation.z - start_xz.y) / delta
 
+# checks whether the character is on a floor - TODO: still kinda buggy and janky
 func _is_on_ground(delta: float, fudge: Vector2 = Vector2(velocity.x, velocity.z)) -> bool:
-#	print(fudge)
 	return !test_move(transform, Vector3(fudge.x * -delta, 0.001, fudge.y * -delta)) \
 		and test_move(transform, Vector3(fudge.x * -delta, -0.001, fudge.y * -delta))
 
