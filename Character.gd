@@ -96,7 +96,8 @@ func _modify_move_input(move_input: Vector2) -> Vector2:
 
 # runs physics for horizontal movement
 func _handle_horizontal_motion(delta: float, move_input: Vector2) -> void:
-	if _is_on_ground(delta) || _is_on_ground(delta, move_input):
+	var initially_on_ground = _is_on_ground()
+	if initially_on_ground:
 		velocity -= Vector3(velocity.x, 0, velocity.z) * delta * REGULAR_ACCEL_FACTOR
 		velocity += Vector3(move_input.x, 0, move_input.y) * delta * REGULAR_ACCEL_FACTOR
 	else:
@@ -107,16 +108,36 @@ func _handle_horizontal_motion(delta: float, move_input: Vector2) -> void:
 		if (move_input.length_squared() == 0):
 			velocity -= Vector3(velocity.x, 0, velocity.z) * delta * EXTRA_AIR_BRAKE_FACTOR
 	
+	var tmp_transform = transform
+	
 	var _walk_collision = move_and_collide(Vector3(velocity.x, 0, velocity.z) * delta)
+	
+#	print(initially_on_ground, _is_on_ground())
+	
+	if motion_state == MotionState.SNEAK and initially_on_ground and not _is_on_ground():
+		print("fall off")
+		transform = tmp_transform
+		_walk_collision = move_and_collide(Vector3(0, 0, velocity.z) * delta)
+		if not _is_on_ground():
+			transform = tmp_transform
+			_walk_collision = move_and_collide(Vector3(velocity.x, 0, 0) * delta)
+			if not _is_on_ground():
+				transform = tmp_transform
 
 # runs physics for vertical movement
 func _handle_vertical_motion(delta: float) -> void:
 	velocity.y -= GRAVITY * delta
 	
-	if _is_on_ground(delta) and Input.is_action_pressed("jump"):
+	if _is_on_ground() and Input.is_action_pressed("jump") and velocity.y <= 0:
 		velocity.y = JUMP_VELOCITY
 	
+	if _is_on_ground() and velocity.y <= 0:
+		velocity.y = 0
+		return
+	
 	# -0.2 in horizontal motion is to prevent walls from causing weirdness
+	var init_pos = Vector2(transform.origin.x, transform.origin.z)
+	
 	var vertical_collision = \
 		move_and_collide(Vector3(-0.2 * velocity.x, velocity.y, -0.2 * velocity.z) * delta)
 	
@@ -127,6 +148,19 @@ func _handle_vertical_motion(delta: float) -> void:
 	
 	translation.x += velocity.x * 0.2 * delta
 	translation.z += velocity.z * 0.2 * delta
+	
+	var final_pos = Vector2(transform.origin.x, transform.origin.z)
+	var delta_pos = final_pos - init_pos
+	
+#	if (!final_pos.is_equal_approx(init_pos)):
+#		print()
+#		print(init_pos)
+#		print(final_pos)
+#		print(delta_pos)
+#		translate(Vector3(delta_pos.x, 0, delta_pos.y) * -2)
+#		move_and_collide(Vector3(0, 0, 0))
+	
+	
 
 # clips stored velocity to actual velocity over this loop cycle
 func _clip_horizontal_velocity(delta: float, start_xz: Vector2) -> void:
@@ -134,9 +168,22 @@ func _clip_horizontal_velocity(delta: float, start_xz: Vector2) -> void:
 	velocity.z = (translation.z - start_xz.y) / delta
 
 # checks whether the character is on a floor - TODO: still kinda buggy and janky
-func _is_on_ground(delta: float, fudge: Vector2 = Vector2(velocity.x, velocity.z)) -> bool:
-	return !test_move(transform, Vector3(fudge.x * -delta, 0.001, fudge.y * -delta)) \
-		and test_move(transform, Vector3(fudge.x * -delta, -0.001, fudge.y * -delta))
+func _is_on_ground() -> bool:
+	
+	var tmp_transform = transform
+	var tmp_safe_margin = get_safe_margin()
+	set_safe_margin(tmp_safe_margin * 3)
+	var tmp_collision = move_and_collide(Vector3.ZERO)
+	if tmp_collision != null:
+		translate(tmp_collision.remainder)
+	set_safe_margin(tmp_safe_margin)
+	var result = !test_move(transform, Vector3(0, get_safe_margin() * 3, 0)) and test_move(transform, Vector3(0, -get_safe_margin() * 3, 0))
+#	print(transform.basis.y)
+	transform = tmp_transform
+	return result
+
+#	return !test_move(transform, Vector3(fudge.x * -delta, 0.001, fudge.y * -delta)) \
+#		and test_move(transform, Vector3(fudge.x * -delta, -0.001, fudge.y * -delta))
 
 func _input(event):
 	if event.is_action_pressed("ui_cancel"):
